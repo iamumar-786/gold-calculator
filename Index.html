@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>22K Gold Deal Checker</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    body {
+      margin: 0;
+      padding: 16px;
+      background: #f5f5f7;
+    }
+    .app {
+      max-width: 480px;
+      margin: 0 auto;
+      background: #ffffff;
+      border-radius: 12px;
+      padding: 16px 16px 24px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+    }
+    h1 {
+      font-size: 20px;
+      margin: 0 0 4px;
+      text-align: center;
+    }
+    .subtitle {
+      font-size: 13px;
+      color: #666;
+      text-align: center;
+      margin-bottom: 16px;
+    }
+    label {
+      display: block;
+      font-size: 14px;
+      margin-bottom: 4px;
+      font-weight: 600;
+    }
+    input[type="number"] {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      font-size: 14px;
+      margin-bottom: 12px;
+    }
+    .btn {
+      width: 100%;
+      border: none;
+      border-radius: 999px;
+      padding: 10px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      background: #0070f3;
+      color: #fff;
+      margin-top: 4px;
+    }
+    .btn:disabled {
+      opacity: 0.6;
+      cursor: default;
+    }
+    .section-title {
+      font-size: 14px;
+      font-weight: 600;
+      margin: 16px 0 6px;
+      border-bottom: 1px solid #eee;
+      padding-bottom: 4px;
+    }
+    .row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 14px;
+      margin: 2px 0;
+    }
+    .row span.value {
+      font-weight: 600;
+    }
+    .note {
+      font-size: 12px;
+      color: #777;
+      margin-top: 8px;
+    }
+
+    .error {
+      color: #b00020;
+      font-size: 13px;
+      margin-top: 6px;
+    }
+    .success {
+      color: #0070f3;
+      font-size: 13px;
+      margin-top: 6px;
+    }
+
+    .small-input-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-top: 4px;
+    }
+    .small-input-row input {
+      max-width: 80px;
+      margin-bottom: 0;
+    }
+
+    .price-mode {
+      margin: 10px 0 6px;
+      font-size: 13px;
+    }
+    .price-mode label {
+      font-weight: 400;
+      display: inline-flex;
+      align-items: center;
+      margin-right: 10px;
+    }
+    .price-mode input[type="radio"] {
+      margin-right: 4px;
+    }
+
+    /* Deal rating colors */
+    .deal-rating {
+      font-weight: 700;
+      font-size: 15px;
+    }
+    .deal-good {
+      color: #1a7f37;   /* green */
+    }
+    .deal-ok {
+      color: #b25e00;   /* amber */
+    }
+    .deal-bad {
+      color: #b00020;   /* red */
+    }
+
+    /* Bold black target vs asking */
+    .deal-details-strong {
+      font-weight: 700;
+      color: #000000 !important;
+      font-size: 13px;
+    }
+
+  </style>
+</head>
+<body>
+  <div class="app">
+    <h1>22K Gold Deal Checker</h1>
+    <div class="subtitle">
+      Live spot or your own price → 22K melt → your target price & deal rating
+    </div>
+
+    <div>
+      <label for="grams">Weight (grams)</label>
+      <input type="number" id="grams" min="0" step="0.01" placeholder="e.g. 10" />
+
+      <label for="askingPrice">Jeweler's asking price (USD)</label>
+      <input type="number" id="askingPrice" min="0" step="0.01" placeholder="e.g. 1000" />
+
+      <div class="small-input-row">
+        <span style="font-size:13px;">Bargain margin over melt (%)</span>
+        <input type="number" id="marginPct" min="0" step="0.5" value="5" />
+      </div>
+
+      <div class="price-mode">
+        <div style="font-weight:600; margin-bottom:4px;">Gold price source:</div>
+        <label>
+          <input type="radio" name="priceMode" value="api" checked />
+          Use live API (24K)
+        </label>
+        <label>
+          <input type="radio" name="priceMode" value="manual" />
+          Use my own prices
+        </label>
+      </div>
+
+      <div id="manualPrices" style="display:none; margin-top:6px;">
+        <label for="manual24g">24K price per gram (USD)</label>
+        <input type="number" id="manual24g" min="0" step="0.01" placeholder="optional" />
+
+        <label for="manual22g">22K price per gram (USD)</label>
+        <input type="number" id="manual22g" min="0" step="0.01" placeholder="optional" />
+
+        <div class="note">
+          Enter either 24K, 22K, or both. If only one is entered, the other is calculated using 22K = 24K × (22/24).
+        </div>
+      </div>
+
+      <button class="btn" id="calcBtn">Calculate</button>
+      <div id="status" class="success"></div>
+      <div id="error" class="error"></div>
+    </div>
+
+    <div id="results" style="display:none;">
+      <div class="section-title">Gold Price Used</div>
+      <div class="row">
+        <span>24K price per gram:</span>
+        <span class="value" id="spot24g"></span>
+      </div>
+      <div class="row">
+        <span>22K price per gram:</span>
+        <span class="value" id="spot22g"></span>
+      </div>
+
+      <div class="section-title">This Piece</div>
+      <div class="row">
+        <span>22K melt value:</span>
+        <span class="value" id="meltValue"></span>
+      </div>
+      <div class="row">
+        <span>Jeweler asking:</span>
+        <span class="value" id="askingValue"></span>
+      </div>
+      <div class="row">
+        <span>Markup amount:</span>
+        <span class="value" id="markupAmount"></span>
+      </div>
+      <div class="row">
+        <span>Markup over melt:</span>
+        <span class="value" id="markupPct"></span>
+      </div>
+
+      <div class="section-title">Suggested Counteroffer</div>
+      <div class="row">
+        <span>Target price (your limit):</span>
+        <span class="value" id="targetPrice"></span>
+      </div>
+
+      <div class="row">
+        <span>Deal rating:</span>
+        <span class="value deal-rating" id="dealRating"></span>
+      </div>
+
+      <!-- Bold black target vs asking -->
+      <div id="dealDetails" class="note deal-details-strong"></div>
+
+      <div class="note">
+        Live spot is investment price; jewelers add making charges, tax, and margin.
+        Deal rating compares their price to <strong>your</strong> chosen margin above melt.
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const GOLD_API_URL = "https://api.gold-api.com/price/XAU";
+    const GRAMS_PER_TROY_OUNCE = 31.1034768;
+    const PURITY_22K = 22 / 24;
+
+    async function fetchGoldPricePerOunceUSD() {
+      const res = await fetch(GOLD_API_URL);
+      if (!res.ok) throw new Error("API error: " + res.status);
+
+      const data = await res.json();
+      if (typeof data.price !== "number") throw new Error("API response invalid");
+
+      return data.price;
+    }
+
+    function formatMoney(x) {
+      return "$" + x.toFixed(2);
+    }
+
+    function getDealRatingInfo(asking, targetPrice) {
+      if (asking <= targetPrice) {
+        return { label: "Good (meets your target)", className: "deal-good" };
+      } else if (asking <= targetPrice * 1.10) {
+        return { label: "OK (slightly above your target)", className: "deal-ok" };
+      } else {
+        return { label: "Expensive (well above your target)", className: "deal-bad" };
+      }
+    }
+
+    // Show/hide manual price area
+    document.querySelectorAll('input[name="priceMode"]').forEach(r => {
+      r.addEventListener("change", () => {
+        document.getElementById("manualPrices").style.display =
+          r.value === "manual" ? "block" : "none";
+      });
+    });
+
+    document.getElementById("calcBtn").addEventListener("click", async () => {
+      const grams = parseFloat(document.getElementById("grams").value);
+      const asking = parseFloat(document.getElementById("askingPrice").value);
+      const marginPct = parseFloat(document.getElementById("marginPct").value || "5");
+      const priceMode = document.querySelector('input[name="priceMode"]:checked').value;
+
+      const statusEl = document.getElementById("status");
+      const errorEl = document.getElementById("error");
+      const resultsEl = document.getElementById("results");
+
+      statusEl.textContent = "";
+      errorEl.textContent = "";
+      resultsEl.style.display = "none";
+
+      if (!grams || !asking || grams <= 0 || asking <= 0) {
+        errorEl.textContent = "Please enter valid weight and asking price.";
+        return;
+      }
+
+      let pricePerGram24k, pricePerGram22k;
+      const btn = document.getElementById("calcBtn");
+      btn.disabled = true;
+
+      try {
+        if (priceMode === "api") {
+          statusEl.textContent = "Fetching live gold price...";
+          const perOunce = await fetchGoldPricePerOunceUSD();
+          pricePerGram24k = perOunce / GRAMS_PER_TROY_OUNCE;
+          pricePerGram22k = pricePerGram24k * PURITY_22K;
+
+        } else {
+          const manual24 = parseFloat(document.getElementById("manual24g").value);
+          const manual22 = parseFloat(document.getElementById("manual22g").value);
+
+          if (!manual24 && !manual22) {
+            errorEl.textContent = "Enter manual 24K or 22K price.";
+            btn.disabled = false;
+            return;
+          }
+
+          if (manual24) {
+            pricePerGram24k = manual24;
+            pricePerGram22k = manual22 || manual24 * PURITY_22K;
+          } else {
+            pricePerGram22k = manual22;
+            pricePerGram24k = manual22 / PURITY_22K;
+          }
+
+          statusEl.textContent = "Using your manual prices.";
+        }
+
+        const meltValue = pricePerGram22k * grams;
+        const markupAmount = asking - meltValue;
+        const markupPct = (markupAmount / meltValue) * 100;
+        const targetPrice = meltValue * (1 + marginPct / 100);
+
+        document.getElementById("spot24g").textContent = formatMoney(pricePerGram24k);
+        document.getElementById("spot22g").textContent = formatMoney(pricePerGram22k);
+        document.getElementById("meltValue").textContent = formatMoney(meltValue);
+        document.getElementById("askingValue").textContent = formatMoney(asking);
+        document.getElementById("markupAmount").textContent = formatMoney(markupAmount);
+        document.getElementById("markupPct").textContent = markupPct.toFixed(1) + "%";
+        document.getElementById("targetPrice").textContent = formatMoney(targetPrice);
+
+        const rating = getDealRatingInfo(asking, targetPrice);
+        const ratingEl = document.getElementById("dealRating");
+
+        ratingEl.textContent = rating.label;
+        ratingEl.classList.remove("deal-good", "deal-ok", "deal-bad");
+        ratingEl.classList.add(rating.className);
+
+        // Bold black details line
+        const detailsEl = document.getElementById("dealDetails");
+        detailsEl.innerHTML =
+          "Your target: <strong>" + formatMoney(targetPrice) +
+          "</strong> | Jeweler asking: <strong>" + formatMoney(asking) + "</strong>";
+
+        resultsEl.style.display = "block";
+        if (priceMode === "api" && !statusEl.textContent.includes("Using")) {
+          statusEl.textContent = "Live price loaded.";
+        }
+
+      } catch (e) {
+        console.error(e);
+        errorEl.textContent = "Could not get price. Check connection/API.";
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
