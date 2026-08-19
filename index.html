@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>22K Gold Deal Checker</title>
+  <title>Gold Deal Checker</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     :root {
@@ -136,6 +136,35 @@
       color: #b00020;   /* red */
     }
 
+    .usd-eq {
+      display: block;
+      font-weight: 400;
+      font-size: 12px;
+      color: #888;
+      text-align: right;
+    }
+    select {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      font-size: 14px;
+      margin-bottom: 12px;
+      background: #fff;
+    }
+    .checkbox-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      font-size: 13px;
+      margin: 10px 0 4px;
+    }
+    .checkbox-row label {
+      font-weight: 400;
+      margin: 0;
+    }
+
     /* Bold black target vs asking */
     .deal-details-strong {
       font-weight: 700;
@@ -147,9 +176,9 @@
 </head>
 <body>
   <div class="app">
-    <h1>22K Gold Deal Checker</h1>
+    <h1><span class="karat-label">22</span>K Gold Deal Checker</h1>
     <div class="subtitle">
-      Live spot or your own price → 22K melt → your target price & deal rating
+      Live spot or your own price → <span class="karat-label">22</span>K melt → your target price &amp; deal rating
     </div>
 
     <div>
@@ -165,11 +194,26 @@
         </label>
       </div>
 
+      <label for="karat">Purity</label>
+      <select id="karat">
+        <option value="24">24K (pure)</option>
+        <option value="22" selected>22K</option>
+        <option value="21">21K (common in Saudi)</option>
+        <option value="18">18K</option>
+      </select>
+
       <label for="grams">Weight (grams)</label>
       <input type="number" id="grams" min="0" step="0.01" placeholder="e.g. 10" />
 
       <label for="askingPrice">Jeweler's asking price (<span class="cur-label">USD</span>)</label>
       <input type="number" id="askingPrice" min="0" step="0.01" placeholder="e.g. 1000" />
+
+      <div class="checkbox-row">
+        <input type="checkbox" id="vatIncluded" />
+        <label for="vatIncluded">
+          Jeweler's price includes 15% VAT (Saudi) — strip it before comparing to melt
+        </label>
+      </div>
 
       <div class="small-input-row">
         <span style="font-size:13px;">Bargain margin over melt (%)</span>
@@ -192,10 +236,12 @@
         <label for="manual24g">24K price per gram (<span class="cur-label">USD</span>)</label>
         <input type="number" id="manual24g" min="0" step="0.01" placeholder="optional" />
 
-        <label for="manual22g">22K price per gram (<span class="cur-label">USD</span>)</label>
-        <input type="number" id="manual22g" min="0" step="0.01" placeholder="optional" />
+        <div id="manualKaratWrap">
+          <label for="manualKg"><span class="karat-label">22</span>K price per gram (<span class="cur-label">USD</span>)</label>
+          <input type="number" id="manualKg" min="0" step="0.01" placeholder="optional" />
+        </div>
 
-        <div class="note">
+        <div class="note" id="manualNote">
           Enter either 24K, 22K, or both. If only one is entered, the other is calculated using 22K = 24K × (22/24).
         </div>
       </div>
@@ -212,18 +258,22 @@
         <span class="value" id="spot24g"></span>
       </div>
       <div class="row">
-        <span>22K price per gram:</span>
-        <span class="value" id="spot22g"></span>
+        <span><span class="karat-label">22</span>K price per gram:</span>
+        <span class="value" id="spotKg"></span>
       </div>
 
       <div class="section-title">This Piece</div>
       <div class="row">
-        <span>22K melt value:</span>
+        <span><span class="karat-label">22</span>K melt value:</span>
         <span class="value" id="meltValue"></span>
       </div>
       <div class="row">
-        <span>Jeweler asking:</span>
+        <span>Jeweler asking (as tagged):</span>
         <span class="value" id="askingValue"></span>
+      </div>
+      <div class="row" id="askingExVatRow" style="display:none;">
+        <span>Jeweler asking (ex-VAT):</span>
+        <span class="value" id="askingExVat"></span>
       </div>
       <div class="row">
         <span>Markup amount:</span>
@@ -236,8 +286,12 @@
 
       <div class="section-title">Suggested Counteroffer</div>
       <div class="row">
-        <span>Target price (your limit):</span>
+        <span>Target price (your limit, ex-VAT):</span>
         <span class="value" id="targetPrice"></span>
+      </div>
+      <div class="row" id="offerRow" style="display:none;">
+        <span>Offer at counter (incl. VAT):</span>
+        <span class="value" id="offerPrice"></span>
       </div>
 
       <div class="row">
@@ -251,7 +305,7 @@
       <div class="note" id="fxNote"></div>
 
       <div class="note">
-        Live spot is investment price; jewelers add making charges, tax, and margin.
+        Live spot is investment price; jewelers add making charges and margin on top.
         Deal rating compares their price to <strong>your</strong> chosen margin above melt.
       </div>
     </div>
@@ -260,7 +314,8 @@
   <script>
     const GOLD_API_URL = "https://api.gold-api.com/price/XAU";
     const GRAMS_PER_TROY_OUNCE = 31.1034768;
-    const PURITY_22K = 22 / 24;
+    const PURITIES = { 24: 1, 22: 22 / 24, 21: 21 / 24, 18: 18 / 24 };
+    const VAT_RATE = 0.15;
 
     // SAR is pegged to USD at 3.75 by SAMA (fixed since 1986), so no FX lookup is needed.
     const CURRENCIES = {
@@ -278,6 +333,10 @@
       return CURRENCIES[code];
     }
 
+    function activeKarat() {
+      return parseInt(document.getElementById("karat").value, 10);
+    }
+
     async function fetchGoldPricePerOunceUSD() {
       const res = await fetch(GOLD_API_URL);
       if (!res.ok) throw new Error("API error: " + res.status);
@@ -288,8 +347,34 @@
       return data.price;
     }
 
+    // Sign goes outside the symbol: -SAR 38.04, not SAR -38.04.
     function formatMoney(x, cur) {
-      return cur.symbol + x.toFixed(2);
+      return (x < 0 ? "-" : "") + cur.symbol + Math.abs(x).toFixed(2);
+    }
+
+    // Blank for USD so the equivalent line never reads "$1600.00 = $1600.00".
+    function usdEquivalent(x, cur) {
+      if (cur.perUSD === 1) return "";
+      const usd = x / cur.perUSD;
+      return "= " + (usd < 0 ? "-" : "") + "$" + Math.abs(usd).toFixed(2);
+    }
+
+    function setMoney(id, x, cur) {
+      const el = document.getElementById(id);
+      el.textContent = formatMoney(x, cur);
+      const eq = usdEquivalent(x, cur);
+      if (eq) {
+        const eqEl = document.createElement("span");
+        eqEl.className = "usd-eq";
+        eqEl.textContent = eq;
+        el.appendChild(eqEl);
+      }
+    }
+
+    function clearResults() {
+      document.getElementById("results").style.display = "none";
+      document.getElementById("status").textContent = "";
+      document.getElementById("error").textContent = "";
     }
 
     function getDealRatingInfo(asking, targetPrice) {
@@ -309,10 +394,30 @@
         document.querySelectorAll(".cur-label").forEach(el => {
           el.textContent = cur.label;
         });
-        document.getElementById("results").style.display = "none";
-        document.getElementById("status").textContent = "";
-        document.getElementById("error").textContent = "";
+        // Saudi shop tags include VAT; US ones do not.
+        document.getElementById("vatIncluded").checked = cur.label === "SAR";
+        clearResults();
       });
+    });
+
+    document.getElementById("vatIncluded").addEventListener("change", clearResults);
+
+    // Karat change rewrites every "22K" label and invalidates the karat-priced
+    // input, whose entered number meant a different purity a moment ago.
+    document.getElementById("karat").addEventListener("change", () => {
+      const karat = activeKarat();
+      document.querySelectorAll(".karat-label").forEach(el => {
+        el.textContent = String(karat);
+      });
+      document.getElementById("manualKg").value = "";
+      document.getElementById("manualKaratWrap").style.display =
+        karat === 24 ? "none" : "block";
+      document.getElementById("manualNote").textContent =
+        karat === 24
+          ? "Enter the 24K price per gram."
+          : "Enter either 24K, " + karat + "K, or both. If only one is entered, the other is calculated using "
+            + karat + "K = 24K \u00d7 (" + karat + "/24).";
+      clearResults();
     });
 
     // Show/hide manual price area
@@ -329,6 +434,9 @@
       const marginPct = parseFloat(document.getElementById("marginPct").value || "5");
       const priceMode = document.querySelector('input[name="priceMode"]:checked').value;
       const cur = activeCurrency();
+      const karat = activeKarat();
+      const purity = PURITIES[karat];
+      const vatIncluded = document.getElementById("vatIncluded").checked;
 
       const statusEl = document.getElementById("status");
       const errorEl = document.getElementById("error");
@@ -343,7 +451,7 @@
         return;
       }
 
-      let pricePerGram24k, pricePerGram22k;
+      let pricePerGram24k, pricePerGramKarat;
       const btn = document.getElementById("calcBtn");
       btn.disabled = true;
 
@@ -353,45 +461,59 @@
           const perOunce = await fetchGoldPricePerOunceUSD();
           // API quotes USD/oz; convert to the chosen currency before anything else.
           pricePerGram24k = (perOunce * cur.perUSD) / GRAMS_PER_TROY_OUNCE;
-          pricePerGram22k = pricePerGram24k * PURITY_22K;
+          pricePerGramKarat = pricePerGram24k * purity;
 
         } else {
           const manual24 = parseFloat(document.getElementById("manual24g").value);
-          const manual22 = parseFloat(document.getElementById("manual22g").value);
+          // At 24K the karat field is hidden, and a hidden input keeps its value.
+          const manualKarat = karat === 24
+            ? NaN
+            : parseFloat(document.getElementById("manualKg").value);
 
-          if (!manual24 && !manual22) {
-            errorEl.textContent = "Enter manual 24K or 22K price.";
+          if (!manual24 && !manualKarat) {
+            errorEl.textContent = "Enter manual 24K or " + karat + "K price.";
             btn.disabled = false;
             return;
           }
 
           if (manual24) {
             pricePerGram24k = manual24;
-            pricePerGram22k = manual22 || manual24 * PURITY_22K;
+            pricePerGramKarat = manualKarat || manual24 * purity;
           } else {
-            pricePerGram22k = manual22;
-            pricePerGram24k = manual22 / PURITY_22K;
+            // Entered price is already at this purity — do not multiply again.
+            pricePerGramKarat = manualKarat;
+            pricePerGram24k = manualKarat / purity;
           }
 
           statusEl.textContent = "Using your manual prices.";
         }
 
-        const meltValue = pricePerGram22k * grams;
-        const markupAmount = asking - meltValue;
+        // VAT is tax, not jeweler margin, so strip it before comparing to melt.
+        const askingExVat = vatIncluded ? asking / (1 + VAT_RATE) : asking;
+
+        const meltValue = pricePerGramKarat * grams;
+        const markupAmount = askingExVat - meltValue;
         const markupPct = (markupAmount / meltValue) * 100;
         const targetPrice = meltValue * (1 + marginPct / 100);
+        // What you actually say at the counter, since tags are VAT-inclusive.
+        const offerPrice = vatIncluded ? targetPrice * (1 + VAT_RATE) : targetPrice;
 
-        document.getElementById("spot24g").textContent = formatMoney(pricePerGram24k, cur);
-        document.getElementById("spot22g").textContent = formatMoney(pricePerGram22k, cur);
-        document.getElementById("meltValue").textContent = formatMoney(meltValue, cur);
-        document.getElementById("askingValue").textContent = formatMoney(asking, cur);
-        document.getElementById("markupAmount").textContent = formatMoney(markupAmount, cur);
+        setMoney("spot24g", pricePerGram24k, cur);
+        setMoney("spotKg", pricePerGramKarat, cur);
+        setMoney("meltValue", meltValue, cur);
+        setMoney("askingValue", asking, cur);
+        setMoney("askingExVat", askingExVat, cur);
+        setMoney("markupAmount", markupAmount, cur);
         document.getElementById("markupPct").textContent = markupPct.toFixed(1) + "%";
-        document.getElementById("targetPrice").textContent = formatMoney(targetPrice, cur);
+        setMoney("targetPrice", targetPrice, cur);
+        setMoney("offerPrice", offerPrice, cur);
+
+        document.getElementById("askingExVatRow").style.display = vatIncluded ? "flex" : "none";
+        document.getElementById("offerRow").style.display = vatIncluded ? "flex" : "none";
         document.getElementById("fxNote").textContent =
           priceMode === "api" ? cur.note : "";
 
-        const rating = getDealRatingInfo(asking, targetPrice);
+        const rating = getDealRatingInfo(askingExVat, targetPrice);
         const ratingEl = document.getElementById("dealRating");
 
         ratingEl.textContent = rating.label;
@@ -401,8 +523,9 @@
         // Bold black details line
         const detailsEl = document.getElementById("dealDetails");
         detailsEl.innerHTML =
-          "Your target: <strong>" + formatMoney(targetPrice, cur) +
-          "</strong> | Jeweler asking: <strong>" + formatMoney(asking, cur) + "</strong>";
+          "Your offer: <strong>" + formatMoney(offerPrice, cur) +
+          "</strong> | Jeweler asking: <strong>" + formatMoney(asking, cur) + "</strong>" +
+          (vatIncluded ? " (both incl. VAT)" : "");
 
         resultsEl.style.display = "block";
         if (priceMode === "api" && !statusEl.textContent.includes("Using")) {
